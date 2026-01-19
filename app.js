@@ -54,41 +54,72 @@ if(btnTranslate){
     btnTranslate.textContent = 'Çeviriliyor...';
     const nameRows = findNameRows();
     
-    // Kaynak dil (language1 = column A/0)
+    console.log('Name rows found:', nameRows);
+    console.log('Selected languages:', selectedLangs);
+    
+    // Kaynak dil (language1 = column B/1)
     const sourceLang = selectedLangs[0] || 'auto';
     
+    let translationCount = 0;
+    
     for(const r of nameRows){
+      // Name: satırındaki B sütunu (column 1)
       const bcell = document.querySelector(`.cell[data-r='${r}'][data-c='1']`);
-      const checkCell = document.querySelector(`.cell[data-r='${r+3}'][data-c='1']`);
       const bval = bcell ? (bcell.innerText||'').trim() : '';
-      const checkVal = checkCell ? (checkCell.innerText||'').trim() : '';
-      if(bval === '') continue;
-      if(checkVal !== '0') continue;
       
-      // Column B (index 1) -> Language2-8 (columns 2-8)
+      console.log(`Row ${r}: bval="${bval}"`);
+      
+      if(bval === '') {
+        console.log(`Row ${r}: Skipping - empty bval`);
+        continue;
+      }
+      
+      // 3 satır aşağı = r+3
+      const targetRow = r + 3;
+      
+      // Language2-8 için C-I sütunları (columns 2-8)
       for(let colIndex=2; colIndex<=8; colIndex++){
-        // selectedLangs[0] = language1 (kaynak)
-        // selectedLangs[1] = language2 (column C = index 2)
-        // selectedLangs[2] = language3 (column D = index 3)
+        // selectedLangs[1] = Language2 (column C)
+        // selectedLangs[2] = Language3 (column D)
         // ...
-        const langIndex = colIndex - 1; // language2 için 1, language3 için 2 vb.
+        // selectedLangs[7] = Language8 (column I)
+        const langIndex = colIndex - 1;
         const targetLang = selectedLangs[langIndex] || 'en';
         
         // Eğer hedef dil kaynak dil ile aynıysa veya 'auto' ise, çevirme
         if(targetLang === 'auto' || targetLang === sourceLang){
+          console.log(`Row ${targetRow}, Col ${colIndex}: Skipping - same language or auto`);
           continue;
         }
         
-        const translated = await translateText(bval, sourceLang, targetLang);
-        const targetCell = document.querySelector(`.cell[data-r='${r}'][data-c='${colIndex}']`);
-        if(targetCell) {
-          targetCell.innerText = translated;
+        const targetCell = document.querySelector(`.cell[data-r='${targetRow}'][data-c='${colIndex}']`);
+        if(!targetCell) {
+          console.log(`Row ${targetRow}, Col ${colIndex}: Cell not found`);
+          continue;
         }
+        
+        // Sadece boş hücreleri çevir
+        const existingValue = (targetCell.innerText || '').trim();
+        if(existingValue !== '') {
+          console.log(`Row ${targetRow}, Col ${colIndex}: Already has value "${existingValue}", skipping`);
+          continue;
+        }
+        
+        console.log(`Row ${targetRow}, Col ${colIndex}: Translating "${bval}" from ${sourceLang} to ${targetLang}`);
+        
+        const translated = await translateText(bval, sourceLang, targetLang);
+        console.log(`Translated result: "${translated}"`);
+        
+        targetCell.innerText = translated;
+        translationCount++;
+        console.log(`Updated cell [${targetRow}][${colIndex}]`);
       }
     }
+    
     btnTranslate.disabled = false;
     btnTranslate.textContent = 'Çevir';
-    alert('Çeviri tamamlandı.');
+    console.log(`Translation completed. ${translationCount} cells updated.`);
+    alert(`Çeviri tamamlandı. ${translationCount} hücre güncellendi.`);
   });
 }
 
