@@ -53,6 +53,10 @@ if(btnTranslate){
     btnTranslate.disabled = true;
     btnTranslate.textContent = 'Çeviriliyor...';
     const nameRows = findNameRows();
+    
+    // Kaynak dil (language1 = column A/0)
+    const sourceLang = selectedLangs[0] || 'auto';
+    
     for(const r of nameRows){
       const bcell = document.querySelector(`.cell[data-r='${r}'][data-c='1']`);
       const checkCell = document.querySelector(`.cell[data-r='${r+3}'][data-c='1']`);
@@ -60,12 +64,26 @@ if(btnTranslate){
       const checkVal = checkCell ? (checkCell.innerText||'').trim() : '';
       if(bval === '') continue;
       if(checkVal !== '0') continue;
-      // translate into language2..language8 -> columns 2..8
-      for(let langNum=2; langNum<=8; langNum++){
-        const targetLang = selectedLangs[langNum-1] || 'en';
-        const translated = await translateText(bval, selectedLangs[0] || 'auto', targetLang);
-        const targetCell = document.querySelector(`.cell[data-r='${r}'][data-c='${langNum}']`);
-        if(targetCell) targetCell.innerText = translated;
+      
+      // Column B (index 1) -> Language2-8 (columns 2-8)
+      for(let colIndex=2; colIndex<=8; colIndex++){
+        // selectedLangs[0] = language1 (kaynak)
+        // selectedLangs[1] = language2 (column C = index 2)
+        // selectedLangs[2] = language3 (column D = index 3)
+        // ...
+        const langIndex = colIndex - 1; // language2 için 1, language3 için 2 vb.
+        const targetLang = selectedLangs[langIndex] || 'en';
+        
+        // Eğer hedef dil kaynak dil ile aynıysa veya 'auto' ise, çevirme
+        if(targetLang === 'auto' || targetLang === sourceLang){
+          continue;
+        }
+        
+        const translated = await translateText(bval, sourceLang, targetLang);
+        const targetCell = document.querySelector(`.cell[data-r='${r}'][data-c='${colIndex}']`);
+        if(targetCell) {
+          targetCell.innerText = translated;
+        }
       }
     }
     btnTranslate.disabled = false;
