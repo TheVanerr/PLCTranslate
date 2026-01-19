@@ -1,0 +1,38 @@
+:root{--bg:#f6f7fb;--card:#ffffff;--accent:#1e90ff;--text:#222}
+*{box-sizing:border-box;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:flex-start;padding:32px 32px 32px 56px}
+main{width:100%;max-width:none;background:var(--card);border-radius:10px;padding:24px;box-shadow:0 6px 20px rgba(20,30,60,0.08)}
+h1{margin:0 0 8px 0;font-size:20px}
+p{margin:0 0 16px 0;color:#445}
+.drop-area{border:2px dashed #d7dbe6;border-radius:8px;padding:18px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;cursor:pointer}
+.drop-area input[type=file]{display:none}
+#file-label{color:var(--accent)}
+.table-container{margin-top:18px;overflow:auto}
+table{border-collapse:collapse;width:100%;max-width:100%}
+table,th,td{border:1px solid #e3e6ee}
+th,td{padding:8px;text-align:left;font-size:13px}
+th{background:#fafbfd}
+
+/* Spreadsheet styles */
+.toolbar{display:flex;gap:8px;margin-bottom:12px}
+.toolbar button{background:#fff;border:1px solid #d7dbe6;padding:6px 10px;border-radius:6px;cursor:pointer}
+.lang-row{display:flex;gap:12px;align-items:end;margin-bottom:12px;flex-wrap:wrap}
+.lang-select{display:flex;flex-direction:column;min-width:160px}
+.lang-select button{padding:8px 10px;border-radius:6px;border:1px solid #d7dbe6;background:white;cursor:pointer}
+.lang-select label{font-size:13px;color:#334;padding:2px 0}
+.lang-select select{padding:6px 8px;border-radius:6px;border:1px solid #d7dbe6;background:white}
+.sheet{width:100%;border-collapse:collapse}
+.sheet th.col-header{background:#f4f6fb;padding:6px 10px;position:sticky;top:0;z-index:2}
+.sheet th.row-header{background:#f4f6fb;padding:6px 10px;position:sticky;left:0;z-index:1}
+.sheet td.cell{min-width:80px;max-width:250px;padding:6px 8px;white-space:pre-wrap;overflow:hidden}
+.sheet td.cell[contenteditable]{cursor:text}
+.cell.selected{background:rgba(30,144,255,0.12)}
+.cell.copied{outline:2px dashed rgba(30,144,255,0.5)}
+.cell:focus{outline:2px solid rgba(30,144,255,0.2)}
+
+/* visually separate headers */
+.sheet th.col-header:first-child,.sheet th.row-header:first-child{background:#eef2ff}
+
+
+@media (max-width:600px){body{padding:12px}main{padding:16px}}
