@@ -19,7 +19,7 @@ langBoxes.forEach((el, idx)=>{
 });
 const btnTranslate = document.getElementById('btn-translate');
 
-const TRANSLATE_ENDPOINT = '/translate'; // rewrite to Firebase function (or replace with full function URL)
+const TRANSLATE_ENDPOINT = '/.netlify/functions/translate'; // Netlify Functions endpoint
 
 async function translateText(text, source, target){
   if(!text) return '';
