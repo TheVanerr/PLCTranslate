@@ -129,6 +129,9 @@ let selecting = false;
 let anchor = null; // {r,c}
 let focusCell = {r:0,c:0};
 let lastCopy = null; // TSV string for visual copy
+let history = []; // action history for undo
+let redoStack = [];
+const MAX_HISTORY = 200;
 
 function showError(msg){
   tableContainer.innerHTML = `<div class="error">${msg}</div>`;
@@ -195,6 +198,7 @@ function renderSheet(){
       td.addEventListener('mouseenter', cellMouseEnter);
       td.addEventListener('click', cellClick);
       td.addEventListener('focus', cellFocus);
+      td.addEventListener('blur', cellBlur);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -252,6 +256,18 @@ function cellClick(e){
 function cellFocus(e){
   const r = Number(this.dataset.r), c = Number(this.dataset.c);
   focusCell = {r,c};
+  // store previous value for edit detection (will be compared on blur)
+  this.dataset._prev = this.innerText || '';
+}
+
+function cellBlur(e){
+  const r = Number(this.dataset.r), c = Number(this.dataset.c);
+  const prev = this.dataset._prev || '';
+  const cur = this.innerText || '';
+  if(prev !== cur){
+    const act = { type: 'set', changes: [{ r, c, oldValue: prev, newValue: cur }] };
+    recordAction(act);
+  }
 }
 
 document.addEventListener('mouseup', ()=>{ selecting=false; });
@@ -294,6 +310,44 @@ function undoFromHistory(history, steps){
     undone.push(h.pop());
   }
   return { undone, history: h };
+}
+
+// Record an action into history; clear redo stack on new action
+function recordAction(act){
+  if(!act) return;
+  history.push(act);
+  if(history.length > MAX_HISTORY) history.shift();
+  redoStack = [];
+}
+
+// Apply an action object (used by undo/redo). If `reverse` is true,
+// applies the inverse (i.e. sets cells to oldValue). Otherwise applies newValue.
+function applyAction(act, reverse){
+  if(!act || act.type !== 'set' || !Array.isArray(act.changes)) return;
+  const changes = reverse ? act.changes.slice().reverse() : act.changes;
+  for(const ch of changes){
+    const r = ch.r, c = ch.c;
+    const val = reverse ? ch.oldValue : ch.newValue;
+    const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+    if(el) el.innerText = val;
+  }
+}
+
+function performUndo(){
+  if(history.length === 0) return false;
+  const act = history.pop();
+  // apply inverse of action
+  applyAction(act, true);
+  redoStack.push(act);
+  return true;
+}
+
+function performRedo(){
+  if(redoStack.length === 0) return false;
+  const act = redoStack.pop();
+  applyAction(act, false);
+  history.push(act);
+  return true;
 }
 
 function focusAt(r,c){
@@ -342,10 +396,15 @@ async function copySelection(){
 async function cutSelection(){
   await copySelection();
   const s = getSelectionRange();
+  const changes = [];
   for(let r=s.r1;r<=s.r2;r++) for(let c=s.c1;c<=s.c2;c++){
     const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
-    if(el){ el.innerText=''; }
+    if(el){
+      changes.push({ r, c, oldValue: el.innerText || '', newValue: '' });
+      el.innerText = '';
+    }
   }
+  if(changes.length) recordAction({ type: 'set', changes });
 }
 
 async function pasteClipboard(){
@@ -357,21 +416,35 @@ async function pasteClipboard(){
   const rows = text.replace(/\r/g,'').split('\n').map(r=>r.split('\t'));
   const s = getSelectionRange();
   const startR = s.r1, startC = s.c1;
+  const changes = [];
   for(let r=0;r<rows.length;r++){
     for(let c=0;c<rows[r].length;c++){
       const rr = startR + r, cc = startC + c;
       const el = document.querySelector(`.cell[data-r='${rr}'][data-c='${cc}']`);
-      if(el) el.innerText = rows[r][c];
+      if(el){
+        const oldv = el.innerText || '';
+        const newv = rows[r][c] || '';
+        if(oldv !== newv){
+          changes.push({ r: rr, c: cc, oldValue: oldv, newValue: newv });
+          el.innerText = newv;
+        }
+      }
     }
   }
+  if(changes.length) recordAction({ type: 'set', changes });
 }
 
 function deleteSelection(){
   const s = getSelectionRange();
+  const changes = [];
   for(let r=s.r1;r<=s.r2;r++) for(let c=s.c1;c<=s.c2;c++){
     const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
-    if(el) el.innerText='';
+    if(el){
+      changes.push({ r, c, oldValue: el.innerText || '', newValue: '' });
+      el.innerText = '';
+    }
   }
+  if(changes.length) recordAction({ type: 'set', changes });
 }
 
 // Buttons (only attach if elements exist)
