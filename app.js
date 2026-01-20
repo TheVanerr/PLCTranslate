@@ -74,45 +74,56 @@ if(btnTranslate){
         continue;
       }
       
-      // 3 satır aşağı = r+3
-      const targetRow = r + 3;
+      // Hedef satırları belirle: 3 satır aşağı (r+3) ve 4 satır aşağı (r+4) eğer A sütununda 1 varsa
+      const targetRows = [r + 3];
       
-      // Language2-8 için C-I sütunları (columns 2-8)
-      for(let colIndex=2; colIndex<=8; colIndex++){
-        // selectedLangs[1] = Language2 (column C)
-        // selectedLangs[2] = Language3 (column D)
-        // ...
-        // selectedLangs[7] = Language8 (column I)
-        const langIndex = colIndex - 1;
-        const targetLang = selectedLangs[langIndex] || 'en';
-        
-        // Eğer hedef dil kaynak dil ile aynıysa veya 'auto' ise, çevirme
-        if(targetLang === 'auto' || targetLang === sourceLang){
-          console.log(`Row ${targetRow}, Col ${colIndex}: Skipping - same language or auto`);
-          continue;
+      // 4 satır aşağıyı kontrol et (r+4), A sütunu (column 0)
+      const fourthRowCell = document.querySelector(`.cell[data-r='${r + 4}'][data-c='0']`);
+      const fourthRowValue = fourthRowCell ? (fourthRowCell.innerText||'').trim() : '';
+      if(fourthRowValue === '1') {
+        targetRows.push(r + 4);
+        console.log(`Row ${r + 4}: Found '1' in column A, adding to target rows`);
+      }
+      
+      // Her hedef satır için çeviri yap
+      for(const targetRow of targetRows) {
+        // Language2-8 için C-I sütunları (columns 2-8)
+        for(let colIndex=2; colIndex<=8; colIndex++){
+          // selectedLangs[1] = Language2 (column C)
+          // selectedLangs[2] = Language3 (column D)
+          // ...
+          // selectedLangs[7] = Language8 (column I)
+          const langIndex = colIndex - 1;
+          const targetLang = selectedLangs[langIndex] || 'en';
+          
+          // Eğer hedef dil kaynak dil ile aynıysa veya 'auto' ise, çevirme
+          if(targetLang === 'auto' || targetLang === sourceLang){
+            console.log(`Row ${targetRow}, Col ${colIndex}: Skipping - same language or auto`);
+            continue;
+          }
+          
+          const targetCell = document.querySelector(`.cell[data-r='${targetRow}'][data-c='${colIndex}']`);
+          if(!targetCell) {
+            console.log(`Row ${targetRow}, Col ${colIndex}: Cell not found`);
+            continue;
+          }
+          
+          // Sadece boş hücreleri çevir
+          const existingValue = (targetCell.innerText || '').trim();
+          if(existingValue !== '') {
+            console.log(`Row ${targetRow}, Col ${colIndex}: Already has value "${existingValue}", skipping`);
+            continue;
+          }
+          
+          console.log(`Row ${targetRow}, Col ${colIndex}: Translating "${bval}" from ${sourceLang} to ${targetLang}`);
+          
+          const translated = await translateText(bval, sourceLang, targetLang);
+          console.log(`Translated result: "${translated}"`);
+          
+          targetCell.innerText = translated;
+          translationCount++;
+          console.log(`Updated cell [${targetRow}][${colIndex}]`);
         }
-        
-        const targetCell = document.querySelector(`.cell[data-r='${targetRow}'][data-c='${colIndex}']`);
-        if(!targetCell) {
-          console.log(`Row ${targetRow}, Col ${colIndex}: Cell not found`);
-          continue;
-        }
-        
-        // Sadece boş hücreleri çevir
-        const existingValue = (targetCell.innerText || '').trim();
-        if(existingValue !== '') {
-          console.log(`Row ${targetRow}, Col ${colIndex}: Already has value "${existingValue}", skipping`);
-          continue;
-        }
-        
-        console.log(`Row ${targetRow}, Col ${colIndex}: Translating "${bval}" from ${sourceLang} to ${targetLang}`);
-        
-        const translated = await translateText(bval, sourceLang, targetLang);
-        console.log(`Translated result: "${translated}"`);
-        
-        targetCell.innerText = translated;
-        translationCount++;
-        console.log(`Updated cell [${targetRow}][${colIndex}]`);
       }
     }
     
