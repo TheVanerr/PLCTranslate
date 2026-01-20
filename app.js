@@ -233,6 +233,7 @@ function renderSheet(){
       td.addEventListener('mouseenter', cellMouseEnter);
       td.addEventListener('click', cellClick);
       td.addEventListener('focus', cellFocus);
+      td.addEventListener('blur', cellBlur);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -435,6 +436,8 @@ document.addEventListener('keydown', async (e)=>{
   if(e.ctrlKey && e.key.toLowerCase()==='v'){ e.preventDefault(); await pasteClipboard(); }
   if(e.key==='Delete' || e.key==='Backspace'){ e.preventDefault(); deleteSelection(); }
   if(e.ctrlKey && e.key.toLowerCase()==='a'){ e.preventDefault(); anchor={r:0,c:0}; applySelection({r:0,c:0},{r:numRows-1,c:numCols-1}); }
+  if(e.ctrlKey && e.key.toLowerCase()==='z'){ e.preventDefault(); performUndo(); }
+  if(e.ctrlKey && e.key.toLowerCase()==='y'){ e.preventDefault(); performRedo(); }
   // Arrow navigation and scrolling
   const arrows = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
   if(arrows.includes(e.key)){
