@@ -129,9 +129,44 @@ let selecting = false;
 let anchor = null; // {r,c}
 let focusCell = {r:0,c:0};
 let lastCopy = null; // TSV string for visual copy
-let history = []; // action history for undo
+
+// --- Undo/Redo history ---
+let history = [];
 let redoStack = [];
 const MAX_HISTORY = 200;
+
+function recordAction(act) {
+  if (!act) return;
+  history.push(act);
+  if (history.length > MAX_HISTORY) history.shift();
+  redoStack = [];
+}
+
+function applyAction(act, reverse) {
+  if (!act || act.type !== 'set' || !Array.isArray(act.changes)) return;
+  for (const ch of act.changes) {
+    const r = ch.r, c = ch.c;
+    const val = reverse ? ch.oldValue : ch.newValue;
+    const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+    if (el) el.innerText = val;
+  }
+}
+
+function performUndo() {
+  if (history.length === 0) return false;
+  const act = history.pop();
+  applyAction(act, true);
+  redoStack.push(act);
+  return true;
+}
+
+function performRedo() {
+  if (redoStack.length === 0) return false;
+  const act = redoStack.pop();
+  applyAction(act, false);
+  history.push(act);
+  return true;
+}
 
 function showError(msg){
   tableContainer.innerHTML = `<div class="error">${msg}</div>`;
@@ -198,7 +233,6 @@ function renderSheet(){
       td.addEventListener('mouseenter', cellMouseEnter);
       td.addEventListener('click', cellClick);
       td.addEventListener('focus', cellFocus);
-      td.addEventListener('blur', cellBlur);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -250,13 +284,20 @@ function cellMouseEnter(e){
 
 function cellClick(e){
   const r = Number(this.dataset.r), c = Number(this.dataset.c);
-  focusCell = {r,c};
+  if (e.shiftKey && anchor) {
+    // Shift ile aralık seçimi
+    applySelection(anchor, {r, c});
+  } else {
+    focusCell = {r, c};
+    anchor = {r, c};
+    applySelection(anchor, anchor);
+  }
 }
 
 function cellFocus(e){
   const r = Number(this.dataset.r), c = Number(this.dataset.c);
   focusCell = {r,c};
-  // store previous value for edit detection (will be compared on blur)
+  // Düzenleme öncesi değeri sakla
   this.dataset._prev = this.innerText || '';
 }
 
@@ -264,7 +305,7 @@ function cellBlur(e){
   const r = Number(this.dataset.r), c = Number(this.dataset.c);
   const prev = this.dataset._prev || '';
   const cur = this.innerText || '';
-  if(prev !== cur){
+  if (prev !== cur) {
     const act = { type: 'set', changes: [{ r, c, oldValue: prev, newValue: cur }] };
     recordAction(act);
   }
@@ -278,76 +319,6 @@ function getSelectionRange(){
   const sels = Array.from(document.querySelectorAll('.cell.selected')).map(el=>({r:Number(el.dataset.r),c:Number(el.dataset.c)}));
   const rs = sels.map(s=>s.r), cs = sels.map(s=>s.c);
   return {r1:Math.min(...rs), r2:Math.max(...rs), c1:Math.min(...cs), c2:Math.max(...cs)};
-}
-
-// Stateless helper: compute normalized selection and list of cells between two coordinates
-// Usage: computeSelection({r:2,c:3}, {r:5,c:1}) -> { range:{r1,r2,c1,c2}, cells:[{r,c}, ...] }
-function computeSelection(a, b){
-  if(!a || !b) return null;
-  const ar = Number(a.r), ac = Number(a.c), br = Number(b.r), bc = Number(b.c);
-  if(Number.isNaN(ar) || Number.isNaN(ac) || Number.isNaN(br) || Number.isNaN(bc)) return null;
-  const r1 = Math.min(ar, br), r2 = Math.max(ar, br);
-  const c1 = Math.min(ac, bc), c2 = Math.max(ac, bc);
-  const cells = [];
-  for(let r=r1;r<=r2;r++){
-    for(let c=c1;c<=c2;c++){
-      cells.push({ r, c });
-    }
-  }
-  return { range: { r1, r2, c1, c2 }, cells };
-}
-
-// Stateless undo helper: given a client-side `history` array, pop up to `steps` actions
-// and return the popped actions along with the remaining history. Does NOT persist state.
-// Expected action format is application-defined (e.g. {type:'set', changes:[{r,c,oldValue,newValue}]})
-function undoFromHistory(history, steps){
-  if(!Array.isArray(history)) return { error: 'history must be an array' };
-  const h = history.slice(); // copy
-  const s = Math.max(1, Number(steps) || 1);
-  const undone = [];
-  for(let i=0;i<s;i++){
-    if(h.length === 0) break;
-    undone.push(h.pop());
-  }
-  return { undone, history: h };
-}
-
-// Record an action into history; clear redo stack on new action
-function recordAction(act){
-  if(!act) return;
-  history.push(act);
-  if(history.length > MAX_HISTORY) history.shift();
-  redoStack = [];
-}
-
-// Apply an action object (used by undo/redo). If `reverse` is true,
-// applies the inverse (i.e. sets cells to oldValue). Otherwise applies newValue.
-function applyAction(act, reverse){
-  if(!act || act.type !== 'set' || !Array.isArray(act.changes)) return;
-  const changes = reverse ? act.changes.slice().reverse() : act.changes;
-  for(const ch of changes){
-    const r = ch.r, c = ch.c;
-    const val = reverse ? ch.oldValue : ch.newValue;
-    const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
-    if(el) el.innerText = val;
-  }
-}
-
-function performUndo(){
-  if(history.length === 0) return false;
-  const act = history.pop();
-  // apply inverse of action
-  applyAction(act, true);
-  redoStack.push(act);
-  return true;
-}
-
-function performRedo(){
-  if(redoStack.length === 0) return false;
-  const act = redoStack.pop();
-  applyAction(act, false);
-  history.push(act);
-  return true;
 }
 
 function focusAt(r,c){
@@ -404,7 +375,7 @@ async function cutSelection(){
       el.innerText = '';
     }
   }
-  if(changes.length) recordAction({ type: 'set', changes });
+  if (changes.length) recordAction({ type: 'set', changes });
 }
 
 async function pasteClipboard(){
@@ -431,7 +402,7 @@ async function pasteClipboard(){
       }
     }
   }
-  if(changes.length) recordAction({ type: 'set', changes });
+  if (changes.length) recordAction({ type: 'set', changes });
 }
 
 function deleteSelection(){
@@ -439,12 +410,12 @@ function deleteSelection(){
   const changes = [];
   for(let r=s.r1;r<=s.r2;r++) for(let c=s.c1;c<=s.c2;c++){
     const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
-    if(el){
+    if(el) {
       changes.push({ r, c, oldValue: el.innerText || '', newValue: '' });
       el.innerText = '';
     }
   }
-  if(changes.length) recordAction({ type: 'set', changes });
+  if (changes.length) recordAction({ type: 'set', changes });
 }
 
 // Buttons (only attach if elements exist)
