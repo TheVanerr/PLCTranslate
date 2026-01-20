@@ -73,40 +73,24 @@ async function translateText(text, source, target){
     }
   }
   
-  // LOKAL TEST MODU - API çağrısı yapmadan mock çeviri
-  if(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'){
-    console.log(`[MOCK TRANSLATION] ${text} (${source} → ${target})`);
-    // Basit mock: metni sözlük ile parça parça çevir
-    let result = text;
-    if(glossary[glossaryKey]){
-      Object.keys(glossary[glossaryKey]).forEach(key => {
-        const regex = new RegExp(key, 'gi');
-        result = result.replace(regex, (match) => {
-          const translated = glossary[glossaryKey][key.toLowerCase()];
-          return match[0] === match[0].toUpperCase()
-            ? translated.charAt(0).toUpperCase() + translated.slice(1)
-            : translated;
-        });
-      });
-    }
-    return result + ' [MOCK]';
-  }
-  
-  // API'ye bağlam ekleyerek gönder
+  // API'ye gönder (context olmadan - çeviride sorun yaratıyor)
   try{
-    const contextText = `[Industrial washing machine context] ${text}`;
     const res = await fetch(TRANSLATE_ENDPOINT, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text: contextText, source: source || 'auto', target })
+      body: JSON.stringify({ text: text, source: source || 'auto', target })
     });
-    if(!res.ok) return text;
+    if(!res.ok) {
+      console.error(`Translation API error: ${res.status} ${res.statusText}`);
+      const errorText = await res.text();
+      console.error('Error details:', errorText);
+      return text;
+    }
     const j = await res.json();
     let result = j.translated || j.translatedText || text;
-    // Bağlam prefix'ini temizle
-    result = result.replace(/\[Industrial washing machine context\]\s*/i, '');
     return result;
   }catch(err){
+    console.error('Translation fetch error:', err);
     return text;
   }
 }
@@ -239,6 +223,9 @@ if(btnTranslate){
           targetCell.innerText = translated;
           translationCount++;
           console.log(`Updated cell [${targetRow}][${colIndex}]`);
+          
+          // Rate limiting: 250ms bekleme
+          await new Promise(resolve => setTimeout(resolve, 250));
         }
       }
     }
@@ -689,7 +676,11 @@ function exportData(format) {
 if(btnExport){
   btnExport.addEventListener('click', ()=>{
     // Kullanıcıya format seçimi sun
-    const format = confirm('Excel (.xlsx) için OK, CSV için Cancel\'a basın') ? 'xlsx' : 'csv';
+    const formatChoice = prompt('Dışa aktarma formatını seçin:\n1 - Excel (.xlsx)\n2 - CSV\n\nSeçiminizi girin (1 veya 2):', '1');
+    
+    if(formatChoice === null) return; // İptal edildi
+    
+    const format = formatChoice === '2' ? 'csv' : 'xlsx';
     exportData(format);
   });
 }
