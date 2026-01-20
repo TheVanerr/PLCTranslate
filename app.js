@@ -18,6 +18,7 @@ langBoxes.forEach((el, idx)=>{
   el.addEventListener('change', ()=>{ selectedLangs[idx] = el.value; });
 });
 const btnTranslate = document.getElementById('btn-translate');
+const btnExport = document.getElementById('btn-export');
 
 const TRANSLATE_ENDPOINT = '/.netlify/functions/translate'; // Netlify Functions endpoint
 
@@ -485,6 +486,43 @@ document.addEventListener('keydown', async (e)=>{
 /* File handling & initial parse */
 function handleFile(file){
   if(!file) return showError('Dosya seçilmedi.');
+  const fileName = file.name.toLowerCase();
+  
+  // CSV dosyası kontrolü
+  if(fileName.endsWith('.csv')){
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try{
+        const text = e.target.result;
+        // CSV'yi parse et (basit virgül ayrımlı)
+        const lines = text.split('\n');
+        const arr = lines.map(line => {
+          // Tırnak içindeki virgülleri koruyarak ayır
+          const regex = /(".*?"|[^,]+)(?=\s*,|\s*$)/g;
+          const matches = [];
+          let match;
+          while ((match = regex.exec(line)) !== null) {
+            let val = match[1].trim();
+            // Tırnakları temizle
+            if(val.startsWith('"') && val.endsWith('"')) {
+              val = val.slice(1, -1);
+            }
+            matches.push(val);
+          }
+          return matches;
+        });
+        buildFromSheetArray(arr);
+      }catch(err){
+        showError('CSV okunurken hata oluştu.');
+        console.error(err);
+      }
+    };
+    reader.onerror = ()=> showError('Dosya okunamadı.');
+    reader.readAsText(file);
+    return;
+  }
+  
+  // Excel dosyası
   const reader = new FileReader();
   reader.onload = (e) => {
     try{
@@ -526,3 +564,53 @@ dropArea.addEventListener('drop', (e)=>{
 
 dropArea.addEventListener('click', ()=> fileInput.click());
 
+// Dışarı Aktar fonksiyonu
+function exportData(format) {
+  if (!sheetData || sheetData.length === 0) {
+    alert('Dışa aktarılacak veri yok!');
+    return;
+  }
+  
+  // Mevcut hücre verilerini sheetData'ya kaydet
+  for(let r=0; r<numRows; r++){
+    for(let c=0; c<numCols; c++){
+      const el = document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+      if(el) sheetData[r][c] = el.innerText || '';
+    }
+  }
+  
+  if(format === 'csv'){
+    // CSV olarak dışa aktar
+    const csvContent = sheetData.map(row => 
+      row.map(cell => {
+        const str = String(cell || '');
+        // Virgül veya tırnak içeriyorsa tırnakla çevrele
+        if(str.includes(',') || str.includes('"') || str.includes('\n')){
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      }).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'export_' + new Date().getTime() + '.csv';
+    link.click();
+  } else if(format === 'xlsx'){
+    // Excel olarak dışa aktar
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, 'export_' + new Date().getTime() + '.xlsx');
+  }
+}
+
+// Dışarı Aktar butonu
+if(btnExport){
+  btnExport.addEventListener('click', ()=>{
+    // Kullanıcıya format seçimi sun
+    const format = confirm('Excel (.xlsx) için OK, CSV için Cancel\'a basın') ? 'xlsx' : 'csv';
+    exportData(format);
+  });
+}
