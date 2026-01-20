@@ -264,6 +264,38 @@ function getSelectionRange(){
   return {r1:Math.min(...rs), r2:Math.max(...rs), c1:Math.min(...cs), c2:Math.max(...cs)};
 }
 
+// Stateless helper: compute normalized selection and list of cells between two coordinates
+// Usage: computeSelection({r:2,c:3}, {r:5,c:1}) -> { range:{r1,r2,c1,c2}, cells:[{r,c}, ...] }
+function computeSelection(a, b){
+  if(!a || !b) return null;
+  const ar = Number(a.r), ac = Number(a.c), br = Number(b.r), bc = Number(b.c);
+  if(Number.isNaN(ar) || Number.isNaN(ac) || Number.isNaN(br) || Number.isNaN(bc)) return null;
+  const r1 = Math.min(ar, br), r2 = Math.max(ar, br);
+  const c1 = Math.min(ac, bc), c2 = Math.max(ac, bc);
+  const cells = [];
+  for(let r=r1;r<=r2;r++){
+    for(let c=c1;c<=c2;c++){
+      cells.push({ r, c });
+    }
+  }
+  return { range: { r1, r2, c1, c2 }, cells };
+}
+
+// Stateless undo helper: given a client-side `history` array, pop up to `steps` actions
+// and return the popped actions along with the remaining history. Does NOT persist state.
+// Expected action format is application-defined (e.g. {type:'set', changes:[{r,c,oldValue,newValue}]})
+function undoFromHistory(history, steps){
+  if(!Array.isArray(history)) return { error: 'history must be an array' };
+  const h = history.slice(); // copy
+  const s = Math.max(1, Number(steps) || 1);
+  const undone = [];
+  for(let i=0;i<s;i++){
+    if(h.length === 0) break;
+    undone.push(h.pop());
+  }
+  return { undone, history: h };
+}
+
 function focusAt(r,c){
   r = Math.max(0, Math.min(numRows-1, r));
   c = Math.max(0, Math.min(numCols-1, c));
