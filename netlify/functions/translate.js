@@ -1,6 +1,6 @@
 // Netlify Function: translate
 // Expects POST JSON { text, source, target }
-// Uses MyMemory Translation API (free, no API key needed, 10000 words/day)
+// Uses DeepL API (requires API key in environment variable DEEPL_API_KEY)
 
 exports.handler = async function(event) {
   try{
@@ -9,17 +9,37 @@ exports.handler = async function(event) {
     const { text, source, target } = body;
     if(!text || !target) return { statusCode: 400, body: JSON.stringify({ error: 'Missing text or target' }) };
 
-    // MyMemory Translation API - Free, no auth required
-    const sourceLang = source && source !== 'auto' ? source : 'auto';
-    const langPair = sourceLang === 'auto' ? target : `${sourceLang}|${target}`;
+    const DEEPL_API_KEY = process.env.DEEPL_API_KEY;
+    if(!DEEPL_API_KEY){
+      console.error('DEEPL_API_KEY not set');
+      return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured', translated: text }) };
+    }
+
+    // DeepL API endpoint (free tier)
+    const apiUrl = 'https://api-free.deepl.com/v2/translate';
     
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langPair}`;
+    // DeepL dil kodları (büyük harf)
+    const targetLang = target.toUpperCase();
+    const sourceLang = source && source !== 'auto' ? source.toUpperCase() : undefined;
     
-    const response = await fetch(url);
+    const params = new URLSearchParams({
+      auth_key: DEEPL_API_KEY,
+      text: text,
+      target_lang: targetLang
+    });
+    
+    if(sourceLang) params.append('source_lang', sourceLang);
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params
+    });
+    
     const data = await response.json();
     
-    if(data && data.responseData && data.responseData.translatedText){
-      const translated = data.responseData.translatedText;
+    if(data && data.translations && data.translations[0]){
+      const translated = data.translations[0].text;
       return { 
         statusCode: 200, 
         body: JSON.stringify({ translated: translated }) 

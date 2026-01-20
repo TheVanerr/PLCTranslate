@@ -22,17 +22,90 @@ const btnExport = document.getElementById('btn-export');
 
 const TRANSLATE_ENDPOINT = '/.netlify/functions/translate'; // Netlify Functions endpoint
 
+// Endüstriyel yıkama makinesi terim sözlüğü
+const glossary = {
+  'tr-en': {
+    'yıkama': 'washing',
+    'durulama': 'rinsing',
+    'sıkma': 'spinning',
+    'kurutma': 'drying',
+    'tank': 'tank',
+    'piston': 'piston',
+    'valf': 'valve',
+    'pompa': 'pump',
+    'motor': 'motor',
+    'kapak': 'door',
+    'kilit': 'lock',
+    'seviye': 'level',
+    'sıcaklık': 'temperature',
+    'basınç': 'pressure',
+    'tahliye': 'drain',
+    'su girişi': 'water inlet',
+    'kapanamadı': 'cannot be closed',
+    'açılamadı': 'cannot be opened',
+    'hata': 'error',
+    'alarm': 'alarm',
+    'uyarı': 'warning',
+    'arıza': 'failure',
+    'sensör': 'sensor',
+    'aktüatör': 'actuator',
+    'program': 'program',
+    'döngü': 'cycle',
+    'yükleme': 'loading',
+    'boşaltma': 'unloading'
+  }
+};
+
+// Terimi önce sözlükten kontrol et, yoksa API'ye gönder
 async function translateText(text, source, target){
   if(!text) return '';
+  
+  // Sözlük kontrolü
+  const glossaryKey = `${source}-${target}`;
+  if(glossary[glossaryKey]){
+    const lowerText = text.toLowerCase().trim();
+    if(glossary[glossaryKey][lowerText]){
+      // Büyük/küçük harf korunarak döndür
+      const translated = glossary[glossaryKey][lowerText];
+      return text[0] === text[0].toUpperCase() 
+        ? translated.charAt(0).toUpperCase() + translated.slice(1)
+        : translated;
+    }
+  }
+  
+  // LOKAL TEST MODU - API çağrısı yapmadan mock çeviri
+  if(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'){
+    console.log(`[MOCK TRANSLATION] ${text} (${source} → ${target})`);
+    // Basit mock: metni sözlük ile parça parça çevir
+    let result = text;
+    if(glossary[glossaryKey]){
+      Object.keys(glossary[glossaryKey]).forEach(key => {
+        const regex = new RegExp(key, 'gi');
+        result = result.replace(regex, (match) => {
+          const translated = glossary[glossaryKey][key.toLowerCase()];
+          return match[0] === match[0].toUpperCase()
+            ? translated.charAt(0).toUpperCase() + translated.slice(1)
+            : translated;
+        });
+      });
+    }
+    return result + ' [MOCK]';
+  }
+  
+  // API'ye bağlam ekleyerek gönder
   try{
+    const contextText = `[Industrial washing machine context] ${text}`;
     const res = await fetch(TRANSLATE_ENDPOINT, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text, source: source || 'auto', target })
+      body: JSON.stringify({ text: contextText, source: source || 'auto', target })
     });
     if(!res.ok) return text;
     const j = await res.json();
-    return j.translated || j.translatedText || j.translatedText || text;
+    let result = j.translated || j.translatedText || text;
+    // Bağlam prefix'ini temizle
+    result = result.replace(/\[Industrial washing machine context\]\s*/i, '');
+    return result;
   }catch(err){
     return text;
   }
@@ -75,19 +148,61 @@ if(btnTranslate){
         continue;
       }
       
-      // Hedef satırları belirle: 3 satır aşağı (r+3) ve 4 satır aşağı (r+4) eğer A sütununda 1 varsa
-      const targetRows = [r + 3];
+      // Bir alt satırda "Status:" var, onun B sütunundaki (column 1) sayıyı al
+      const statusRowA = document.querySelector(`.cell[data-r='${r + 1}'][data-c='0']`);
+      const statusRowAValue = statusRowA ? (statusRowA.innerText||'').trim() : '';
       
-      // 4 satır aşağıyı kontrol et (r+4), A sütunu (column 0)
-      const fourthRowCell = document.querySelector(`.cell[data-r='${r + 4}'][data-c='0']`);
-      const fourthRowValue = fourthRowCell ? (fourthRowCell.innerText||'').trim() : '';
-      if(fourthRowValue === '1') {
-        targetRows.push(r + 4);
-        console.log(`Row ${r + 4}: Found '1' in column A, adding to target rows`);
+      let statusNum = 0;
+      
+      // Eğer bir alt satırda "Status:" varsa, B sütunundaki sayıyı al
+      if(statusRowAValue.toLowerCase().includes('status')){
+        const statusCell = document.querySelector(`.cell[data-r='${r + 1}'][data-c='1']`);
+        const statusValue = statusCell ? (statusCell.innerText||'').trim() : '';
+        statusNum = parseInt(statusValue) || 0;
+        console.log(`Row ${r}: Found Status row at ${r+1}, value = "${statusValue}", parsed as ${statusNum}`);
+      } else {
+        // Eski mantık: A sütununda doğrudan sayı varsa
+        statusNum = parseInt(statusRowAValue) || 0;
+        console.log(`Row ${r}: No Status label, checking A column value = "${statusRowAValue}", parsed as ${statusNum}`);
       }
+      
+      if(statusNum === 0) {
+        console.log(`Row ${r}: Status is 0, skipping translation`);
+        continue;
+      }
+      
+      // Hedef satırları belirle: Name:'in 3 satır altından başlayarak statusNum kadar satır
+      // Name: r=2, Status=3 -> Satır 5,6,7 (r+3, r+4, r+5) için işlem yap
+      // Bu satırlarda A sütununda 0, 1, 2 yazıyor olacak
+      const targetRows = [];
+      for(let i = 0; i < statusNum; i++){
+        targetRows.push(r + 3 + i);
+      }
+      
+      console.log(`Row ${r}: Target rows for translation:`, targetRows);
       
       // Her hedef satır için çeviri yap
       for(const targetRow of targetRows) {
+        // B sütununa (column 1) çeviriyi yaz
+        const targetCellB = document.querySelector(`.cell[data-r='${targetRow}'][data-c='1']`);
+        if(!targetCellB) {
+          console.log(`Row ${targetRow}, Col 1 (B): Cell not found`);
+          continue;
+        }
+        
+        // B sütunu boşsa çevir
+        const existingValueB = (targetCellB.innerText || '').trim();
+        if(existingValueB !== '') {
+          console.log(`Row ${targetRow}, Col 1 (B): Already has value "${existingValueB}", skipping`);
+        } else {
+          // Kaynak dilden hedef dile çevir (Language1 = sourceLang)
+          console.log(`Row ${targetRow}, Col 1 (B): Translating "${bval}" from ${sourceLang} to ${sourceLang}`);
+          // B sütunu kaynak dil ile aynı, direkt kopyala
+          targetCellB.innerText = bval;
+          translationCount++;
+          console.log(`Updated cell [${targetRow}][1] with "${bval}"`);
+        }
+        
         // Language2-8 için C-I sütunları (columns 2-8)
         for(let colIndex=2; colIndex<=8; colIndex++){
           // selectedLangs[1] = Language2 (column C)
@@ -486,54 +601,18 @@ document.addEventListener('keydown', async (e)=>{
 /* File handling & initial parse */
 function handleFile(file){
   if(!file) return showError('Dosya seçilmedi.');
-  const fileName = file.name.toLowerCase();
-  
-  // CSV dosyası kontrolü
-  if(fileName.endsWith('.csv')){
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try{
-        const text = e.target.result;
-        // CSV'yi parse et (basit virgül ayrımlı)
-        const lines = text.split('\n');
-        const arr = lines.map(line => {
-          // Tırnak içindeki virgülleri koruyarak ayır
-          const regex = /(".*?"|[^,]+)(?=\s*,|\s*$)/g;
-          const matches = [];
-          let match;
-          while ((match = regex.exec(line)) !== null) {
-            let val = match[1].trim();
-            // Tırnakları temizle
-            if(val.startsWith('"') && val.endsWith('"')) {
-              val = val.slice(1, -1);
-            }
-            matches.push(val);
-          }
-          return matches;
-        });
-        buildFromSheetArray(arr);
-      }catch(err){
-        showError('CSV okunurken hata oluştu.');
-        console.error(err);
-      }
-    };
-    reader.onerror = ()=> showError('Dosya okunamadı.');
-    reader.readAsText(file);
-    return;
-  }
-  
-  // Excel dosyası
   const reader = new FileReader();
   reader.onload = (e) => {
     try{
       const data = new Uint8Array(e.target.result);
+      // XLSX.js CSV'yi de okuyabilir
       const workbook = XLSX.read(data, {type:'array'});
       const first = workbook.SheetNames[0];
       const sheet = workbook.Sheets[first];
       const arr = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false});
       buildFromSheetArray(arr);
     }catch(err){
-      showError('Excel okunurken hata oluştu.');
+      showError('Dosya okunurken hata oluştu.');
       console.error(err);
     }
   };
